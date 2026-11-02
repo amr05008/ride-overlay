@@ -1,0 +1,17 @@
+# OS and Python cruft
+.DS_Store
+__pycache__/
+
+# Ride data and footage stay out of the repo by default (your FIT files carry GPS tracks).
+# A deliberate sample can be added under examples/.
+*.fit
+*.FIT
+*.mp4
+*.MP4
+*.mov
+*.MOV
+!examples/**
+
+# Outputs, if you point folder mode at a folder inside the repo
+renders/
+ride-overlay/

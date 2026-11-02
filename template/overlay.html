@@ -1,0 +1,115 @@
+<template>
+  <!--
+    The default ride overlay: a left-aligned serif stack, no backing, one size for numbers
+    and units, a dark outline for contrast.
+    Power, heart rate and speed (km/h) by default; cadence and time on request. A field the FIT
+    doesn't record is left out. reel.py fills in __W__ and __H__ with the frame size.
+  -->
+  <style>
+    #root {
+      position: absolute;
+      inset: 0;
+      color: #ffffff;
+      font-family: "EB Garamond", serif;
+    }
+    #ov {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      gap: 0.05em;
+      line-height: 1.05;
+      text-shadow: 0 0.024em 0.095em rgba(0, 0, 0, 0.5);
+    }
+    .ov-num,
+    .ov-unit {
+      font-weight: 400;
+      line-height: 1.05;
+      font-variant-numeric: lining-nums tabular-nums;
+      -webkit-text-stroke: 0.083em rgba(0, 0, 0, 0.8);
+      paint-order: stroke fill;
+    }
+    .ov-unit {
+      margin-left: 0.25em;
+    }
+    .ov-hidden {
+      display: none !important;
+    }
+  </style>
+  <div
+    id="root"
+    data-composition-id="overlay"
+    data-width="__W__"
+    data-height="__H__"
+    data-composition-variables='[
+      {"id":"showHr","type":"boolean","label":"Heart rate","default":true},
+      {"id":"showCadence","type":"boolean","label":"Cadence","default":false},
+      {"id":"showSpeed","type":"boolean","label":"Speed","default":true},
+      {"id":"showTime","type":"boolean","label":"Time","default":false},
+      {"id":"units","type":"enum","label":"Speed units","default":"kmh","options":[{"value":"kmh","label":"km/h"},{"value":"mph","label":"mph"}]},
+      {"id":"timerZero","type":"number","label":"Timer starts at (s)","default":0,"min":0,"step":0.1,"unit":"s"}
+    ]'
+  >
+    <div id="ov">
+      <div class="ov-stat"><span class="ov-num" id="ov-power">0</span><span class="ov-unit">W</span></div>
+      <div class="ov-stat"><span class="ov-num" id="ov-hr">0</span><span class="ov-unit">bpm</span></div>
+      <div class="ov-stat"><span class="ov-num" id="ov-cad">0</span><span class="ov-unit">rpm</span></div>
+      <div class="ov-stat"><span class="ov-num" id="ov-speed">0</span><span class="ov-unit" id="ov-speed-unit">km/h</span></div>
+      <div class="ov-stat"><span class="ov-num" id="ov-time">0:00</span></div>
+    </div>
+  </div>
+  <script>
+    // The scene clock is clip time: mount this at the clip's (or the cut window's) first frame.
+    // window.RIDE comes from assets/ride.js (ride_data.py), one sample per second.
+    const R = window.RIDE;
+    const V = Object.assign(
+      { showHr: true, showCadence: false, showSpeed: true, showTime: false, units: "kmh", timerZero: 0 },
+      (window.__hyperframes && window.__hyperframes.getVariables && window.__hyperframes.getVariables()) || {},
+    );
+    const $ = (id) => document.getElementById(id);
+    const ov = $("ov");
+    const W = Number(ov.parentElement.dataset.width);
+    const H = Number(ov.parentElement.dataset.height);
+    // Bottom-left of the 9:16 frame centred in this one (the whole frame for a Reel, the middle
+    // third of a 16:9 frame, which is what survives a vertical crop), just above the band Reels
+    // cover with the caption. Sized to the frame height.
+    const reelW = Math.min(W, (H * 9) / 16);
+    ov.style.left = (W - reelW) / 2 + 0.07 * reelW + "px";
+    ov.style.bottom = 0.25 * H + "px";
+    ov.style.fontSize = 0.0389 * H + "px";
+
+    const kmh = V.units === "kmh";
+    $("ov-speed-unit").textContent = kmh ? "km/h" : "mph";
+    // A field shows when its variable is on and the FIT has samples for it.
+    const fields = [
+      { id: "ov-power", key: "power", on: true, fmt: Math.round },
+      { id: "ov-hr", key: "hr", on: V.showHr, fmt: Math.round },
+      { id: "ov-cad", key: "cadence", on: V.showCadence, fmt: Math.round },
+      // Under 0.3 mph reads 0.0, as on a head unit: the last sample before an auto-pause is ~0.2.
+      { id: "ov-speed", key: "mph", on: V.showSpeed, fmt: (v) => (v < 0.3 ? 0 : kmh ? v * 1.609344 : v).toFixed(1) },
+    ].filter((f) => {
+      const shown = f.on && Array.isArray(R[f.key]);
+      if (!shown) $(f.id).parentElement.classList.add("ov-hidden");
+      return shown;
+    });
+    if (!V.showTime) $("ov-time").parentElement.classList.add("ov-hidden");
+
+    const clock = (s) => {
+      const t = Math.floor(Math.max(0, s));
+      const h = Math.floor(t / 3600);
+      const m = Math.floor((t % 3600) / 60);
+      const ss = String(t % 60).padStart(2, "0");
+      return h ? h + ":" + String(m).padStart(2, "0") + ":" + ss : m + ":" + ss;
+    };
+    // Numbers step once a second, like the head unit.
+    const at = (arr, t) => arr[Math.max(0, Math.min(arr.length - 1, Math.floor(t)))];
+    const st = { t: 0 };
+    const draw = () => {
+      $("ov-time").textContent = clock(st.t - V.timerZero);
+      for (const f of fields) $(f.id).textContent = f.fmt(at(R[f.key], st.t));
+    };
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo(st, { t: 0 }, { t: R.seconds, duration: R.seconds, ease: "none", onUpdate: draw, immediateRender: true }, 0);
+    draw();
+    window.__timelines["overlay"] = tl;
+  </script>
+</template>
