@@ -1,15 +1,17 @@
 """Folder mode: point the ride overlay at a folder of ride clips and a FIT.
 
 Usage:
-  uv run --with fitdecode python -I ride_overlay.py <folder> [--full | --layer] [--start CLIP@S]
-      [--seconds 30] [--fields hr,speed] [--units kmh|mph] [--offset S] [--dry-run]
+  uv run --with fitdecode python -I ride_overlay.py <folder> [--full | --layer | --square]
+      [--start CLIP@S] [--seconds 30] [--fields hr,speed] [--units kmh|mph] [--offset S] [--dry-run]
 
 Finds the FIT files and the camera clips in the folder (not its subfolders), matches each clip to
 a ride by its recorded start time, and reports what it found. Then, by default, it makes a Reel
 of the hardest --seconds (highest average power) across every clip; with --start it uses that
-clip and second instead (CLIP is any unique part of the file name, e.g. 100@764). --full renders
-each clip whole with the overlay, in its own shape (slow for 4K landscape: about 4-5x the clip's
-length). --layer renders a transparent overlay layer for each landscape clip, for an editor.
+clip and second instead (CLIP is any unique part of the file name, e.g. 100@764). A clip keeps the
+shape it was shot in (4K for landscape, slow: about 4-5x the window's length); --square puts a
+landscape clip in a Reel on a vertical frame instead, as a square crop over a blurred copy.
+--full renders each clip whole with the overlay. --layer renders a transparent overlay layer for
+each landscape clip, for an editor.
 
 Outputs go to <folder>/renders/; the HyperFrames projects stay in <folder>/ride-overlay/, where
 `npx hyperframes@0.8.207 preview` opens one for tweaks. --fields picks the lines after power
@@ -100,7 +102,7 @@ def scan(folder, offset):
     return fits, clips
 
 
-def report(folder, fits, clips, fields):
+def report(folder, fits, clips, fields, square=False, layer=False):
     print(f"Folder: {folder}")
     if not fits:
         print("No FIT file found. Add the head unit's file (or Strava's Export original).")
@@ -118,6 +120,8 @@ def report(folder, fits, clips, fields):
             where = "in the ride" if c["coverage"] >= 0.9 else f"in the ride, but only {c['coverage']:.0%} of it has data (paused, or partly outside)"
             if len(fits) > 1:
                 where += f" ({os.path.basename(c['fit'])})"
+            if not layer:
+                where += f"; renders as {reel.shape_label(reel.framing_for(i, square))}"
         elif c["in_span"]:
             where = "during a pause in the recording: no ride data, skipped"
         elif "t0" in c:
@@ -135,6 +139,7 @@ def main():
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--full", action="store_true", help="render each clip whole with the overlay")
     mode.add_argument("--layer", action="store_true", help="a transparent overlay layer per landscape clip")
+    mode.add_argument("--square", action="store_true", help="in a Reel, put a landscape clip on a vertical frame, as a square crop over a blurred copy")
     ap.add_argument("--start", help="CLIP@SECONDS for the Reel, e.g. 100@764 (default: the hardest window)")
     ap.add_argument("--seconds", type=int, default=30, help="Reel length (default 30)")
     ap.add_argument("--fields", default="hr,speed", help="lines after power: any of hr, speed, cadence, time")
@@ -151,7 +156,7 @@ def main():
     values = {"showHr": "hr" in fields, "showSpeed": "speed" in fields, "showCadence": "cadence" in fields, "showTime": "time" in fields, "units": a.units}
 
     fits, clips = scan(folder, a.offset)
-    report(folder, fits, clips, fields)
+    report(folder, fits, clips, fields, a.square, a.layer)
     usable = [c for c in clips if c["fit"]]
     if not usable:
         sys.exit("Nothing to render: no clip falls inside a ride.")
@@ -188,7 +193,7 @@ def main():
         est = sum(c["info"]["duration"] * (1 if c["info"]["h"] > c["info"]["w"] else 4.5) for c in usable)
         print(f"\nRendering {len(usable)} clip(s) whole, about {mmss(est)} of render time.")
         for c in usable:
-            framing = "portrait" if c["info"]["h"] > c["info"]["w"] else "landscape"
+            framing = reel.framing_for(c["info"])
             out = os.path.join(renders, f"{stem(c)}-overlay.mp4")
             checks = reel.render(c["path"], rides[c["path"]], c["info"], 0, c["info"]["duration"], framing, out, os.path.join(projects, f"{stem(c)}-full"), values, note(c, "whole clip"))
             outputs.append((out, framing, checks))
@@ -212,9 +217,10 @@ def main():
                 sys.exit(f"No power to rank by, or no clip is {a.seconds} s long. Pick the moment with --start CLIP@SECONDS.")
             c, start, avg = best
             print(f"\nHardest {a.seconds} s: {avg:.0f} W average, {c['name']} at {mmss(start)} ({start} s)")
-        framing = "portrait" if c["info"]["h"] > c["info"]["w"] else "square"
-        out = os.path.join(renders, f"{stem(c)}-reel-{start}s.mp4")
-        checks = reel.render(c["path"], rides[c["path"]], c["info"], start, a.seconds, framing, out, os.path.join(projects, f"{stem(c)}-{start}s"), values, note(c, f"clip {start}-{start + a.seconds} s"))
+        framing = reel.framing_for(c["info"], a.square)
+        suffix = "-square" if framing == "square" else ""
+        out = os.path.join(renders, f"{stem(c)}-reel-{start}s{suffix}.mp4")
+        checks = reel.render(c["path"], rides[c["path"]], c["info"], start, a.seconds, framing, out, os.path.join(projects, f"{stem(c)}-{start}s{suffix}"), values, note(c, f"clip {start}-{start + a.seconds} s"))
         outputs.append((out, f"{framing} Reel", checks))
 
     print("\nDone:")

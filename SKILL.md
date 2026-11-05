@@ -39,22 +39,24 @@ cd ~/.claude/skills/ride-overlay/scripts
 uv run -q --with fitdecode python -I ride_overlay.py "<folder>" --dry-run      # report only
 uv run -q --with fitdecode python -I ride_overlay.py "<folder>"                # the hardest 30 s, as a Reel
 uv run -q --with fitdecode python -I ride_overlay.py "<folder>" --start 100@764 --seconds 20
+uv run -q --with fitdecode python -I ride_overlay.py "<folder>" --square       # a landscape clip on a vertical frame
 uv run -q --with fitdecode python -I ride_overlay.py "<folder>" --full         # every clip whole, with the overlay
 uv run -q --with fitdecode python -I ride_overlay.py "<folder>" --layer        # transparent layers for an editor
 ```
 
 - **The report:**
   - For each FIT, what it covers and which fields it records. A missing field is called out, since that line will be left out.
-  - For each clip: its shape, length, local start time, and whether it has ride data.
+  - For each clip: its shape, length, local start time, whether it has ride data, and the shape it renders as.
   - A clip can be **in the ride**; **during a pause** (the head unit auto-paused and recorded nothing); or **outside every ride** (off the bike, or the camera clock is off, so try `--offset`).
   - With several FITs, each clip is matched to the ride it falls in.
 - **Default (no mode): a Reel** of the hardest `--seconds` (30) by average power, across every clip in the ride.
   - A power peak isn't always a good moment. When the user names one, use `--start CLIP@SECONDS`, where CLIP is any unique part of the file name.
 - **Framing:**
-  - A portrait clip fills a 1080×1920 frame and keeps its own sound.
-  - A landscape clip in a Reel goes in as a square centre crop on a blurred, darkened copy of itself. A plain 9:16 crop of 16:9 footage keeps only the middle third and looks too zoomed in.
-  - `--full` keeps landscape clips at 4K, which is slow: about 4–5× the clip's length, against about 1× for portrait. The script prints an estimate first, so tell the user before a long one.
-  - `--layer` is for landscape clips only (see Editors below).
+  - A clip keeps the shape it was shot in, with its own sound, in a Reel and in `--full`. Portrait (taller than wide) fills a 1080×1920 frame. Anything else fills a 3840×2160 frame, centre-cropped if it isn't 16:9, and upscaled if it's smaller: 2.7K footage gains no detail.
+  - In a folder of mixed shapes, a Reel takes the shape of whichever clip holds the hardest window. The report says what each clip renders as.
+  - 4K is slow: about 4–5× the rendered length, against about 1× for portrait, so a 30 s landscape Reel takes about 2 minutes. `--full` prints an estimate first, so tell the user before a long one.
+  - `--square` is for a landscape clip that has to fill a vertical post. It goes in as a square centre crop on a blurred, darkened copy of itself, at 1080×1920, named `<clip>-reel-<start>s-square.mp4`. A plain 9:16 crop of 16:9 footage keeps only the middle third and looks too zoomed in. A portrait clip is unchanged by it, and it can't be combined with `--full` or `--layer`.
+  - `--layer` is for landscape clips only (see Editors below); it skips portrait clips.
 - **Where things go:** outputs in `<folder>/renders/`. The HyperFrames projects stay in `<folder>/ride-overlay/`, where `npx hyperframes@0.8.207 preview` opens one for live tweaks.
 - **Under the hood:**
   - The FIT is read once.
@@ -106,4 +108,4 @@ For 16:9 videos cut in an editor, HyperFrames renders only the overlay; the edit
 - `scripts/place_layer.py`: run inside Resolve; puts the layer above every piece of the raw clip.
 - `scripts/ride_data.py`: FIT plus clip into per-second data.
 - `template/overlay.html`: the overlay composition.
-- `tests/`: checks on the data step. Run them with `uv run --with fitdecode python -m unittest discover tests`.
+- `tests/`: checks on the data step and the framing. Run them with `uv run --with fitdecode python -m unittest discover tests`.

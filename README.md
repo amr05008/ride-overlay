@@ -17,7 +17,7 @@ Everything runs on your machine. HyperFrames renders locally with its telemetry 
 | `scripts/place_layer.py` | Puts that layer above your clips in DaVinci Resolve, through Resolve's MCP |
 | `scripts/ride_data.py` | Lines the FIT up with each clip and turns it into one reading per second |
 | `template/overlay.html` | The overlay itself: plain HTML and CSS, so you can restyle it |
-| `tests/` | Checks on the data step |
+| `tests/` | Checks on the data step and the framing |
 
 ## What you need
 
@@ -65,8 +65,8 @@ The report looks like this (an illustration, not a real ride):
 FIT  prospect-park.fit: 09:02:11 EST to 10:14:40 EST (1:12:29)
      records power, heart rate, cadence, speed
 Clips (3):
-  VID_20261103_091544_101.mp4      landscape 2688x1520     6:12  starts 09:15:44 EST  in the ride
-  VID_20261103_093010_102.mp4      portrait  1520x2688     0:48  starts 09:30:10 EST  in the ride
+  VID_20261103_091544_101.mp4      landscape 2688x1520     6:12  starts 09:15:44 EST  in the ride; renders as 16:9 (3840x2160)
+  VID_20261103_093010_102.mp4      portrait  1520x2688     0:48  starts 09:30:10 EST  in the ride; renders as 9:16 (1080x1920)
   VID_20261103_101900_103.mp4      portrait  1520x2688     0:20  starts 10:19:00 EST  outside every ride (filmed off the bike, or the camera clock is off: try --offset)
 Lines: power, heart rate, speed (any the FIT lacks are left out)
 ```
@@ -77,9 +77,10 @@ Then drop `--dry-run` to render. With no other options you get a Reel of your ha
 
 | option | what it does |
 | --- | --- |
-| *(none)* | A 1080×1920 Reel of the hardest 30 seconds across all your clips |
+| *(none)* | The hardest 30 seconds across all your clips, in the shape you shot it: 1080×1920 for portrait, 4K 16:9 for landscape |
 | `--start 102@15` | You pick the moment: clip 102, from 15 seconds in. Any unique part of the file name works |
 | `--seconds 20` | Reel length |
+| `--square` | Put a landscape clip on a 1080×1920 vertical frame, as a square crop over a blurred copy of itself |
 | `--full` | Every clip, whole, with the overlay, each in its own shape |
 | `--layer` | A transparent 4K overlay layer for each landscape clip, for your editor |
 | `--fields hr,speed,cadence,time` | Which lines show under power (default `hr,speed`) |
@@ -96,8 +97,8 @@ It sits where a vertical video's caption won't cover it. On a 16:9 frame it's in
 If your FIT is missing something (no heart-rate strap, no power meter), that line is simply left out.
 
 **How a clip gets framed:**
-- **Portrait clips** fill the vertical frame.
-- **Landscape clips in a Reel** become a square crop on a blurred copy of themselves. A straight 9:16 crop keeps only the middle third of a 16:9 frame, and it looks too zoomed in.
+- **Every clip keeps the shape you shot it in.** Portrait clips fill a 1080×1920 frame, and landscape clips fill a 4K 16:9 frame. The report tells you which you'll get before anything renders.
+- **A landscape clip that has to fill a vertical post** can use `--square`, which makes it a square crop on a blurred copy of itself. A straight 9:16 crop keeps only the middle third of a 16:9 frame, and it looks too zoomed in.
 
 To restyle it:
 - Ask Claude ("make the numbers bigger", "switch to mph", "add cadence").
@@ -130,6 +131,7 @@ Timed on an M3 Pro MacBook:
 | render | time |
 | --- | --- |
 | A 30-second Reel from a portrait clip | about 30–55 seconds |
+| A 30-second Reel from a 16:9 clip at 4K | about 2 minutes |
 | A transparent 4K layer | about real time |
 | A whole 16:9 clip at 4K with the footage | about 4–5× the clip's length |
 

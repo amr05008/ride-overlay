@@ -2,21 +2,23 @@
 
 Usage:
   uv run --with fitdecode python -I reel.py <clip.mp4> <ride.fit> [--start S] [--seconds 30]
-      [--vars '{"showTime":true}'] [--offset S] [--out <reel.mp4>] [--work <dir>]
+      [--square] [--vars '{"showTime":true}'] [--offset S] [--out <reel.mp4>] [--work <dir>]
 
-Without --start it takes the window with the highest average power. Pass the camera original,
+Without --start it takes the window with the highest average power. A clip keeps the shape it was
+shot in; --square puts a landscape clip on a vertical frame instead. Pass the camera original,
 not an Insta360 Studio export: its creation_time is what lines it up with the FIT. For a whole
 folder (several clips, the moment picked across all of them) use ride_overlay.py instead; it
 calls render() here.
 
 render() steps: cut the window with ffmpeg (which applies the camera's rotation and avoids
 HyperFrames proxying a multi-GB HEVC file); write a HyperFrames project in one of three framings
-(portrait: a portrait clip fills a 1080x1920 frame; square: a landscape clip as a square centre
-crop on a blurred, darkened copy of itself, 1080x1920; landscape: a landscape clip filling a 4K
-frame); lint it; render it with the clip's sound; then save three check frames and work out
-what the overlay should read in each.
+(portrait: a portrait clip fills a 1080x1920 frame; landscape: a landscape clip fills a 4K 16:9
+frame; square, on request: a landscape clip as a square centre crop on a blurred, darkened copy
+of itself, 1080x1920); lint it; render it with the clip's sound; then save three check frames and
+work out what the overlay should read in each.
 
-Defaults: <clip dir>/renders/<clip>-reel-<start>s.mp4, project in <clip dir>/ride-overlay/.
+Defaults: <clip dir>/renders/<clip>-reel-<start>s.mp4 (with -square on the end for --square),
+project in <clip dir>/ride-overlay/.
 """
 import argparse
 import importlib.util
@@ -32,10 +34,24 @@ HF = ["npx", "-y", "hyperframes@0.8.207"]
 ENV = dict(os.environ, DO_NOT_TRACK="1")  # no HeyGen telemetry, ever
 FRAMES = {"portrait": (1080, 1920), "square": (1080, 1920), "landscape": (3840, 2160)}
 BITRATE = {"portrait": "16M", "square": "16M", "landscape": "45M"}
+SHAPES = {"portrait": "9:16", "square": "square on 9:16", "landscape": "16:9"}
 
 spec = importlib.util.spec_from_file_location("ride_data", os.path.join(HERE, "ride_data.py"))
 ride_data = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ride_data)
+
+
+def framing_for(info, square=False):
+    """A clip's framing: the shape it was shot in, or a landscape clip on a vertical frame if square."""
+    if info["h"] > info["w"]:
+        return "portrait"
+    return "square" if square else "landscape"
+
+
+def shape_label(framing):
+    """How a framing reads in a report, e.g. 16:9 (3840x2160)."""
+    w, h = FRAMES[framing]
+    return f"{SHAPES[framing]} ({w}x{h})"
 
 
 def probe(clip):
@@ -213,6 +229,7 @@ def main():
     ap.add_argument("fit")
     ap.add_argument("--start", type=int, help="window start, in clip seconds (default: highest average power)")
     ap.add_argument("--seconds", type=int, default=30)
+    ap.add_argument("--square", action="store_true", help="put a landscape clip on a vertical frame, as a square crop over a blurred copy")
     ap.add_argument("--vars", default="{}", help="overlay variables as JSON, e.g. {\"showTime\":true}")
     ap.add_argument("--offset", type=float, default=0.0, help="seconds to add to the camera's clock")
     ap.add_argument("--out")
@@ -223,7 +240,7 @@ def main():
     values = json.loads(a.vars)
 
     info = probe(clip)
-    framing = "portrait" if info["h"] > info["w"] else "square"
+    framing = framing_for(info, a.square)
     ride, nrecs = ride_data.build(a.fit, clip, a.offset)
     print(f"{stem}: {info['w']}x{info['h']} ({framing}), {ride['seconds']} s;", nrecs, "FIT records")
     if ride_data.missing(ride):
@@ -243,8 +260,9 @@ def main():
         sys.exit(f"window {start}-{start + a.seconds} s runs past the clip ({ride['seconds']} s)")
 
     base = os.path.dirname(clip)
-    out = os.path.abspath(a.out or os.path.join(base, "renders", f"{stem}-reel-{start}s.mp4"))
-    work = os.path.abspath(a.work or os.path.join(base, "ride-overlay", f"{stem}-{start}s"))
+    suffix = "-square" if framing == "square" else ""
+    out = os.path.abspath(a.out or os.path.join(base, "renders", f"{stem}-reel-{start}s{suffix}.mp4"))
+    work = os.path.abspath(a.work or os.path.join(base, "ride-overlay", f"{stem}-{start}s{suffix}"))
     note = f"{stem}, clip {start}-{start + a.seconds} s, from {os.path.basename(a.fit)}."
     checks = render(clip, ride, info, start, a.seconds, framing, out, work, values, note)
     print("wrote", out)
