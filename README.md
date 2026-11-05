@@ -54,6 +54,16 @@ Put your clips and the FIT in one folder, then ask Claude Code:
 
 > Make a Reel of my hardest 30 seconds from ~/Rides/prospect-park
 
+That gives you one Reel: the hardest 30 seconds of the whole ride. For one Reel per clip, paste this and put your folder on the last line:
+
+> Here is a folder containing multiple videos from a recent bike ride as well as the .fit file containing the ride's data.
+>
+> I'd like to see a reel of the hardest (by power) ~30 seconds of each clip to see how the ride data appears on the video. Let's use the /ride-overlay skill to add ride data to each of the videos one by one.
+>
+> I will edit the positioning of the overlay, its style and what metrics appear after we have our initial reels for review. Ask me if you have any questions.
+>
+> Folder: [your folder here]
+
 Or run it yourself, starting with a report of what's in the folder:
 
 ```sh
