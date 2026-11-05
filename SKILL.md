@@ -62,7 +62,7 @@ uv run -q --with fitdecode python -I ride_overlay.py "<folder>" --layer        #
   - The FIT is read once.
   - Each clip's window is cut with ffmpeg, which applies the camera's rotation and avoids HyperFrames proxying a multi-GB HEVC file.
   - Each project is linted with `hyperframes check` before it renders.
-- **Single-clip scripts:** `reel.py <clip> <fit>` and `layer.py <clip> <fit>` do the same for one file. Folder mode calls them.
+- **Single-clip scripts:** `reel.py <clip> <fit>` and `layer.py <clip> <fit>` do the same for one file. Folder mode calls them. For the hardest window of each clip, run `reel.py <clip> <fit>` once per clip. With no `--start`, it picks that clip's peak.
 
 ## Check before calling it done
 
@@ -81,6 +81,8 @@ Then give the user the output path and say what's in the window.
 - **Auto-pause leaves gaps in the FIT.** `ride_data.py` holds the last value across a gap instead of ramping, so a stop doesn't show the rider creeping along. Clips filmed while stopped get no numbers at all.
 - **"FIT has no records inside the clip"** (single-clip scripts) means the wrong FIT, a pause, or an unsynced camera clock. Folder mode reports this per clip instead of stopping.
 - **The first HyperFrames run** downloads the pinned package. A render prints an upsell for HyperFrames' desktop app; ignore it.
+- **A camera clock a few seconds off doesn't show in the metadata.** `creation_time` plus duration matching the file's modified time proves nothing, since both come from the camera. Compare FIT stops and turns with the footage. Camera turning against GPS heading worked best; audio loudness, frame difference and camera shake were too noisy.
+- **Editing in the preview:** select `Ov` in the Layers tab before dragging; clicking the numbers grabs one word. The Variables checkboxes only preview, and "Set default" doesn't reach the footage because `index.html` sets its own values. Re-running the skill on the same clip and window rebuilds the project and resets the move.
 
 ## Editors: an overlay layer for DaVinci Resolve
 
