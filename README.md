@@ -1,8 +1,10 @@
 # ride-overlay
 
-Put your ride data on your bike videos. This takes the FIT file from your bike computer and the original clips from your action camera, and renders your power, heart rate and speed on the footage with [HyperFrames](https://github.com/heygen-com/hyperframes) (HeyGen's open-source HTML-to-video renderer), driven by [Claude Code](https://claude.com/claude-code).
+Put ride data on your bike videos! 
 
-I built it to replace the stats overlay I was making by hand in Insta360 Studio. Now I drop a ride's clips and its FIT file in a folder, ask for my hardest 30 seconds, and a Reel with the numbers on it comes back in about a minute.
+This skill extracts data from your rides FIT file (you can get this from Strava or from your Bike computer) and renders power, heart rate and speed (by default) on your action camera footage using [HyperFrames](https://github.com/heygen-com/hyperframes) (HeyGen's open-source HTML-to-video renderer). You can customize what data fields appear in your overlays beyond the defaults and make further changes right from [Claude Code](https://claude.com/claude-code).
+
+I built this to replace the stats overlay I was making by hand in Insta360 Studio. Now I drop a ride's clips and its FIT file in a folder and can prompt my way into getting ride data onto the right cuts of ride footage. 
 
 Everything runs on your machine. HyperFrames renders locally with its telemetry turned off, and you don't need a HeyGen account.
 
@@ -88,7 +90,7 @@ Then drop `--dry-run` to render. With no other options you get a Reel of your ha
 | `--offset -3600` | Seconds to add to every clip's start time, if the camera clock was wrong |
 | `--dry-run` | Report what's in the folder and stop |
 
-## The overlay
+## The default overlay
 
 A stack of numbers in a serif font, bottom-left, white with a dark outline and no box behind it: power, then heart rate, then speed. The numbers update once a second, like a bike computer. Power is a 3-second average.
 
