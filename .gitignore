@@ -11,6 +11,7 @@ __pycache__/
 *.mov
 *.MOV
 !examples/**
+.demo-overlay
 
 # Outputs, if you point folder mode at a folder inside the repo
 renders/
