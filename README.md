@@ -2,6 +2,8 @@
 
 Put ride data on your bike videos! 
 
+Watch the 8-minute walkthrough: [How to use HyperFrames to add Strava data to bike videos](https://youtu.be/36zoCF5suIE).
+
 This skill extracts data from your rides FIT file (you can get this from [Strava](http://strava.com/) or from your Bike computer) and renders power, heart rate and speed (by default) on your action camera footage using [HyperFrames](https://github.com/heygen-com/hyperframes) (HeyGen's open-source HTML-to-video renderer). You can customize what data fields appear in your overlays beyond the defaults and make further changes right from [Claude Code](https://claude.com/claude-code).
 
 I built this to replace the stats overlay I was making by hand in Insta360 Studio. Now I drop a ride's clips and its FIT file in a folder and can prompt my way into getting ride data onto the right cuts of ride footage. 
