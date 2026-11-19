@@ -48,6 +48,30 @@ class Resample(unittest.TestCase):
         recs = [(0, {"enhanced_speed": 10.0}), (1, {"enhanced_speed": 10.0})]
         self.assertAlmostEqual(ride_data.resample(recs, "enhanced_speed", 1, 2.23694)[0], 22.3694)
 
+    def test_blank_before_and_after_the_fit(self):
+        # The camera rolled before the head unit started (a race grid) and after it stopped:
+        # those seconds are empty, not the first or last reading held.
+        recs = [(2, {"power": 180}), (3, {"power": 300}), (4, {"power": 250})]
+        self.assertEqual(ride_data.resample(recs, "power", 7, cover=(2, 4)), [None, None, 180, 300, 250, None, None])
+
+    def test_cover_still_holds_across_a_pause(self):
+        # The clip ends inside an auto-pause and the FIT carries on afterwards: still a hold.
+        recs = [(0, {"enhanced_speed": 0.1}), (1, {"enhanced_speed": 0.1})]
+        self.assertEqual(ride_data.resample(recs, "enhanced_speed", 5, cover=(0, 500)), [0.1] * 5)
+
+    def test_cover_within_half_a_second(self):
+        # Records land on whole UTC seconds and clips don't: a sample 0.4 s from the first one counts.
+        recs = [(1.4, {"heart_rate": 133}), (2.4, {"heart_rate": 135})]
+        self.assertEqual(ride_data.resample(recs, "heart_rate", 3, cover=(1.4, 2.4))[:2], [None, 133])
+
+
+class Average3(unittest.TestCase):
+    def test_three_second_average(self):
+        self.assertEqual(ride_data.average3([100, 200, 300, 400]), [100, 150, 200, 300])
+
+    def test_empty_seconds_stay_empty(self):
+        self.assertEqual(ride_data.average3([None, None, 100, 200, None]), [None, None, 100, 150, None])
+
 
 class PeakWindow(unittest.TestCase):
     def test_finds_the_hardest_window(self):
@@ -57,6 +81,14 @@ class PeakWindow(unittest.TestCase):
 
     def test_clip_too_short(self):
         self.assertIsNone(reel.peak_window([100] * 10, 30, 9))
+
+    def test_skips_windows_outside_the_fit(self):
+        # The window that would win if empty seconds counted as zero still can't include them.
+        power = [None, 900, 900, 100, 100, 100]
+        self.assertEqual(reel.peak_window(power, 3, len(power) - 1), (1, 1900 / 3))
+
+    def test_no_full_window(self):
+        self.assertIsNone(reel.peak_window([None, 100, None, 100], 2, 3))
 
 
 class Readout(unittest.TestCase):
@@ -70,6 +102,11 @@ class Readout(unittest.TestCase):
 
     def test_speed_off(self):
         self.assertEqual(reel.expected(self.ride, 2, {"showSpeed": False}), "300 W")
+
+    def test_blank_seconds(self):
+        ride = {"seconds": 1, "power": [None, 100], "hr": [None, 140], "cadence": None, "mph": [None, 5]}
+        self.assertEqual(reel.expected(ride, 0, {}), "no numbers (the FIT isn't recording here)")
+        self.assertEqual(reel.expected(ride, 1, {}), "100 W, 140 bpm, 8.0 km/h")
 
 
 if __name__ == "__main__":

@@ -105,7 +105,12 @@
     const st = { t: 0 };
     const draw = () => {
       $("ov-time").textContent = clock(st.t - V.timerZero);
-      for (const f of fields) $(f.id).textContent = f.fmt(at(R[f.key], st.t));
+      for (const f of fields) {
+        // null: the head unit wasn't recording yet, or had stopped. Blank the line, keep the layout.
+        const v = at(R[f.key], st.t);
+        $(f.id).parentElement.style.visibility = v == null ? "hidden" : "";
+        if (v != null) $(f.id).textContent = f.fmt(v);
+      }
     };
     const tl = gsap.timeline({ paused: true });
     tl.fromTo(st, { t: 0 }, { t: R.seconds, duration: R.seconds, ease: "none", onUpdate: draw, immediateRender: true }, 0);

@@ -108,31 +108,38 @@ def lint(work):
 
 
 def peak_window(power, seconds, length):
-    """Start second and average of the window with the highest average power, or None if too short."""
+    """Start second and average of the window with the highest average power.
+
+    Windows with an empty second (outside the FIT) don't count. None if no window qualifies.
+    """
     last = int(length - seconds)
-    if last < 0:
+    sums = {i: sum(power[i : i + seconds]) for i in range(last + 1) if None not in power[i : i + seconds]}
+    if not sums:
         return None
-    sums = [sum(power[i : i + seconds]) for i in range(last + 1)]
-    best = max(range(len(sums)), key=sums.__getitem__)
+    best = max(sums, key=sums.__getitem__)
     return best, sums[best] / seconds
 
 
 def expected(ride, t, v):
     """What the overlay shows at window time t, mirroring the template's formatting."""
     s = min(int(t), ride["seconds"])
+
+    def at(key):  # None when the FIT doesn't record the field, or has no sample this second
+        return ride[key][s] if ride[key] else None
+
     out = []
-    if ride["power"]:
-        out.append(f"{round(ride['power'][s])} W")
-    if v.get("showHr", True) and ride["hr"]:
-        out.append(f"{round(ride['hr'][s])} bpm")
-    if v.get("showCadence", False) and ride["cadence"]:
-        out.append(f"{round(ride['cadence'][s])} rpm")
-    if v.get("showSpeed", True) and ride["mph"]:
-        mph = ride["mph"][s]
+    if at("power") is not None:
+        out.append(f"{round(at('power'))} W")
+    if v.get("showHr", True) and at("hr") is not None:
+        out.append(f"{round(at('hr'))} bpm")
+    if v.get("showCadence", False) and at("cadence") is not None:
+        out.append(f"{round(at('cadence'))} rpm")
+    if v.get("showSpeed", True) and at("mph") is not None:
+        mph = at("mph")
         kmh = v.get("units", "kmh") == "kmh"
         val = 0 if mph < 0.3 else mph * 1.609344 if kmh else mph
         out.append(f"{val:.1f} {'km/h' if kmh else 'mph'}")
-    return ", ".join(out)
+    return ", ".join(out) or "no numbers (the FIT isn't recording here)"
 
 
 def index_html(framing, seconds, values):
@@ -251,7 +258,7 @@ def main():
             sys.exit("no power in this FIT, so pass --start")
         peak = peak_window(ride["power"], a.seconds, ride["seconds"])
         if peak is None:
-            sys.exit(f"clip is shorter than {a.seconds} s")
+            sys.exit(f"no {a.seconds} s stretch of this clip has power the whole way; pass --start")
         start, avg = peak
         print(f"highest {a.seconds} s average power: {avg:.0f} W at clip {start}-{start + a.seconds} s")
     else:

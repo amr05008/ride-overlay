@@ -6,9 +6,12 @@ The clip's start comes from its creation_time tag, which cameras like the Insta3
 in UTC. Use it, not the file name: the name is local time, and around a daylight-saving change it
 can be an hour off while the tag stays right. Samples are resampled to one per clip second,
 starting at clip second 0. Power is a 3 s average, like a head unit. Across a gap (head units
-auto-pause at stops and record nothing) the last value is held rather than ramped. A field the
-FIT doesn't record (no heart-rate strap, no power meter, no GPS) is written as null, and the
-overlay leaves that line out. The route is normalized to a unit square (north up) for a map.
+auto-pause at stops and record nothing) the last value is held rather than ramped. Seconds before
+the FIT's first sample of a field or after its last (the head unit wasn't recording yet, or had
+stopped) are null, and the overlay leaves that line blank there rather than holding the nearest
+value. A field the FIT doesn't record at all (no heart-rate strap, no power meter, no GPS) is
+written as null, and the overlay leaves that line out. The route is normalized to a unit square
+(north up) for a map.
 """
 import datetime
 import json
@@ -45,23 +48,40 @@ def load_fit(fit):
         ]
 
 
-def resample(recs, key, n, scale=1.0):
+def resample(recs, key, n, scale=1.0, cover=None):
     """One value of `key` per second for seconds 0..n-1, from (clip seconds, record) pairs.
 
     Interpolates between records a second or two apart and holds the last value across a longer
     gap (an auto-pause). Returns None if no record has the field.
+
+    cover is (first, last): the clip seconds of the field's first and last sample in the whole
+    FIT. A second more than half a second outside it is None, because the head unit wasn't
+    recording yet or had stopped. Without cover, the nearest value is held at both ends.
     """
     pts = [(t, d[key]) for t, d in recs if d.get(key) is not None]
     if not pts:
         return None
+    lo, hi = cover or (-math.inf, math.inf)
     vals, j = [], 0
     for s in range(n):
+        if s < lo - 0.5 or s > hi + 0.5:
+            vals.append(None)
+            continue
         while j + 1 < len(pts) and pts[j + 1][0] <= s:
             j += 1
         (ta, va), (tb, vb) = pts[j], pts[min(j + 1, len(pts) - 1)]
         f = 0 if tb == ta or tb - ta > 2 else max(0, min(1, (s - ta) / (tb - ta)))
         vals.append((va + (vb - va) * f) * scale)
     return vals
+
+
+def average3(vals):
+    """A 3 s trailing average, like a head unit's power, skipping empty seconds; None stays None."""
+    out = []
+    for i, v in enumerate(vals):
+        recent = [x for x in vals[max(0, i - 2) : i + 1] if x is not None]
+        out.append(None if v is None else sum(recent) / len(recent))
+    return out
 
 
 def build(fit, clip, offset=0.0, records=None):
@@ -73,43 +93,53 @@ def build(fit, clip, offset=0.0, records=None):
     t0, duration = clip_start(clip)
     t0 += datetime.timedelta(seconds=offset)
     n = int(math.ceil(duration)) + 1
+    allrecs = records if records is not None else load_fit(fit)
     recs = []
-    for d in records if records is not None else load_fit(fit):
+    for d in allrecs:
         t = (d["timestamp"] - t0).total_seconds()
         if -5 <= t <= n + 5:
             recs.append((t, d))
     if len(recs) < 2:
         sys.exit(f"FIT has no records inside the clip ({t0.isoformat()}, {n} s): wrong file or unsynced camera clock")
 
+    def field(key, scale=1.0):
+        """resample() limited to the seconds the whole FIT has this field, so it's blank outside them."""
+        ts = [(d["timestamp"] - t0).total_seconds() for d in allrecs if d.get(key) is not None]
+        return resample(recs, key, n, scale, (min(ts), max(ts)) if ts else None)
+
     def rounded(vals, nd):
-        return None if vals is None else [round(v, nd) for v in vals]
+        return None if vals is None else [None if v is None else round(v, nd) for v in vals]
 
     semi = 180 / 2**31
-    lat = resample(recs, "position_lat", n, semi)
-    lon = resample(recs, "position_long", n, semi)
+    lat = field("position_lat", semi)
+    lon = field("position_long", semi)
     x = y = length = None
-    if lat and lon:
-        k = math.cos(math.radians(sum(lat) / n))
-        xs, ys = [v * k for v in lon], [-v for v in lat]
+    have = [i for i in range(n) if lat and lon and lat[i] is not None and lon[i] is not None]
+    if have:
+        k = math.cos(math.radians(sum(lat[i] for i in have) / len(have)))
+        xs, ys = [lon[i] * k for i in have], [-lat[i] for i in have]
         span = max(max(xs) - min(xs), max(ys) - min(ys)) or 1
         ox = (1 - (max(xs) - min(xs)) / span) / 2
         oy = (1 - (max(ys) - min(ys)) / span) / 2
-        x = [round(ox + (v - min(xs)) / span, 4) for v in xs]
-        y = [round(oy + (v - min(ys)) / span, 4) for v in ys]
-        cum = [0.0]
-        for i in range(1, n):
-            cum.append(cum[-1] + math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]))
-        length = [round(v / (cum[-1] or 1), 5) for v in cum]
+        x, y, length = [None] * n, [None] * n, [None] * n
+        for i, vx, vy in zip(have, xs, ys):
+            x[i] = round(ox + (vx - min(xs)) / span, 4)
+            y[i] = round(oy + (vy - min(ys)) / span, 4)
+        cum, total = {have[0]: 0.0}, 0.0
+        for a, b in zip(have, have[1:]):
+            total += math.hypot(x[b] - x[a], y[b] - y[a])
+            cum[b] = total
+        for i in have:
+            length[i] = round(cum[i] / (total or 1), 5)
 
-    pw = resample(recs, "power", n)
-    power = None if pw is None else [sum(pw[max(0, i - 2) : i + 1]) / len(pw[max(0, i - 2) : i + 1]) for i in range(n)]
+    pw = field("power")
     ride = {
         "start": t0.isoformat(),
         "seconds": n - 1,
-        "mph": rounded(resample(recs, "enhanced_speed", n, 2.23694) or resample(recs, "speed", n, 2.23694), 2),
-        "power": rounded(power, 1),
-        "cadence": rounded(resample(recs, "cadence", n), 1),
-        "hr": rounded(resample(recs, "heart_rate", n), 1),
+        "mph": rounded(field("enhanced_speed", 2.23694) or field("speed", 2.23694), 2),
+        "power": rounded(None if pw is None else average3(pw), 1),
+        "cadence": rounded(field("cadence"), 1),
+        "hr": rounded(field("heart_rate"), 1),
         "x": x,
         "y": y,
         "len": length,

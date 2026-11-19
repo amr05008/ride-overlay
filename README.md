@@ -156,6 +156,7 @@ The full-length 4K render is the slow one. HyperFrames draws every frame in a br
 - Tested with an Insta360 GO Ultra and a Hammerhead Karoo 2. Other cameras and head units should work, but I haven't tried them.
 - No route map yet. I built one and took it out; the numbers alone read better.
 - A clip filmed during an auto-pause gets no data.
+- Before the bike computer starts recording, and after it stops, the overlay is blank. Start it before the camera if you want numbers from the first second.
 
 ## Tests
 
