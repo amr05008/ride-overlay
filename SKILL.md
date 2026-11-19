@@ -111,4 +111,4 @@ For 16:9 videos cut in an editor, HyperFrames renders only the overlay; the edit
 - `scripts/place_layer.py`: run inside Resolve; puts the layer above every piece of the raw clip.
 - `scripts/ride_data.py`: FIT plus clip into per-second data.
 - `template/overlay.html`: the overlay composition.
-- `tests/`: checks on the data step and the framing. Run them with `uv run --with fitdecode python -m unittest discover tests`.
+- `tests/`: checks on the data step, the framing and the overlay's draw script (run in Node; skipped without it). Run them with `uv run --with fitdecode python -m unittest discover tests`.

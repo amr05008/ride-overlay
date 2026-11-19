@@ -21,7 +21,7 @@ Everything runs on your machine. HyperFrames renders locally with its telemetry 
 | `scripts/place_layer.py` | Puts that layer above your clips in DaVinci Resolve, through Resolve's MCP |
 | `scripts/ride_data.py` | Lines the FIT up with each clip and turns it into one reading per second |
 | `template/overlay.html` | The overlay itself: plain HTML and CSS, so you can restyle it |
-| `tests/` | Checks on the data step and the framing |
+| `tests/` | Checks on the data step, the framing and the overlay's draw script (in Node) |
 
 ## What you need
 
