@@ -94,25 +94,32 @@ def build(fit, clip, offset=0.0, records=None):
     t0 += datetime.timedelta(seconds=offset)
     n = int(math.ceil(duration)) + 1
     allrecs = records if records is not None else load_fit(fit)
-    recs, before = [], None
+    # recs: the clip's window. before: each field's last sample ahead of the window, so a clip
+    # that starts inside an auto-pause holds the reading from before the pause, field by field,
+    # rather than the first one after the rider set off again.
+    recs, before = [], {}
     for d in allrecs:
         t = (d["timestamp"] - t0).total_seconds()
         if -5 <= t <= n + 5:
             recs.append((t, d))
-        elif t < -5 and (before is None or t > before[0]):
-            before = (t, d)
+        elif t < -5:
+            for key, v in d.items():
+                if v is not None and (key not in before or t > before[key][0]):
+                    before[key] = (t, d)
     if len(recs) < 2:
         sys.exit(f"FIT has no records inside the clip ({t0.isoformat()}, {n} s): wrong file or unsynced camera clock")
-    count = len(recs)  # the clip's own records, for the report
-    if before:
-        # The last reading before the window: if the clip starts inside an auto-pause, that's the
-        # value to hold, not the first reading after the rider set off again.
-        recs.insert(0, before)
 
     def field(key, scale=1.0):
         """resample() limited to the seconds the whole FIT has this field, so it's blank outside them."""
         ts = [(d["timestamp"] - t0).total_seconds() for d in allrecs if d.get(key) is not None]
-        return resample(recs, key, n, scale, (min(ts), max(ts)) if ts else None)
+        lead = [before[key]] if key in before else []
+        return resample(lead + recs, key, n, scale, (min(ts), max(ts)) if ts else None)
+
+    def either(a, b):
+        """Per second, a's value where it has one, else b's: an all-blank a mustn't hide b."""
+        if a is None or b is None:
+            return a if b is None else b
+        return [x if x is not None else y for x, y in zip(a, b)]
 
     def rounded(vals, nd):
         return None if vals is None else [None if v is None else round(v, nd) for v in vals]
@@ -143,7 +150,7 @@ def build(fit, clip, offset=0.0, records=None):
     ride = {
         "start": t0.isoformat(),
         "seconds": n - 1,
-        "mph": rounded(field("enhanced_speed", 2.23694) or field("speed", 2.23694), 2),
+        "mph": rounded(either(field("enhanced_speed", 2.23694), field("speed", 2.23694)), 2),
         "power": rounded(None if pw is None else average3(pw), 1),
         "cadence": rounded(field("cadence"), 1),
         "hr": rounded(field("heart_rate"), 1),
@@ -151,7 +158,7 @@ def build(fit, clip, offset=0.0, records=None):
         "y": y,
         "len": length,
     }
-    return ride, count
+    return ride, len(recs)
 
 
 def missing(ride):

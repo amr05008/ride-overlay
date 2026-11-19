@@ -107,6 +107,23 @@ class Build(unittest.TestCase):
         records = [rec(-50, heart_rate=120), rec(-49, heart_rate=120)] + [rec(s, heart_rate=150) for s in range(6, 10)]
         self.assertEqual(self.build(records)["hr"], [120] * 6 + [150] * 4)
 
+    def test_pause_start_holds_each_fields_own_reading(self):
+        # The last record before the pause has power but no heart rate: heart rate still holds
+        # its own last reading, not the one after the restart.
+        records = [rec(-50, heart_rate=120), rec(-49, power=0)] + [rec(s, heart_rate=150, power=300) for s in range(6, 10)]
+        ride = self.build(records)
+        self.assertEqual(ride["hr"], [120] * 6 + [150] * 4)
+        self.assertEqual(ride["power"][:6], [0] * 6)
+
+    def test_old_enhanced_speed_does_not_hide_basic_speed(self):
+        # Enhanced speed only before the clip, basic speed during it: speed shows from basic.
+        records = [rec(-7, enhanced_speed=4.0), rec(-6, enhanced_speed=4.0)] + [rec(s, speed=5.0) for s in range(10)]
+        self.assertEqual(self.build(records)["mph"], [11.18] * 10)
+
+    def test_speed_fields_fill_each_other_per_second(self):
+        records = [rec(s, enhanced_speed=4.0) for s in range(0, 5)] + [rec(s, speed=5.0) for s in range(5, 10)]
+        self.assertEqual(self.build(records)["mph"], [8.95] * 5 + [11.18] * 5)
+
     def test_route_blank_outside_the_fit(self):
         records = [rec(s, position_lat=round((40.0 + s * 1e-4) * SEMI), position_long=round(-73.0 * SEMI), power=100) for s in range(3, 8)]
         ride = self.build(records)
