@@ -2,9 +2,11 @@
 
 Run from the repo root: uv run --with fitdecode python -m unittest discover tests
 """
+import datetime
 import importlib.util
 import os
 import unittest
+from unittest import mock
 
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 
@@ -65,6 +67,55 @@ class Resample(unittest.TestCase):
         self.assertEqual(ride_data.resample(recs, "heart_rate", 3, cover=(1.4, 2.4))[:2], [None, 133])
 
 
+T0 = datetime.datetime(2026, 11, 15, 16, 0, 0, tzinfo=datetime.timezone.utc)
+SEMI = 2**31 / 180  # degrees to FIT semicircles
+
+
+def rec(sec, **fields):
+    """A FIT record at clip second `sec` (the fake clip starts at T0)."""
+    return dict(timestamp=T0 + datetime.timedelta(seconds=sec), **fields)
+
+
+class Build(unittest.TestCase):
+    """build() end to end, with the clip's start and length faked: the spans come from the whole FIT."""
+
+    def build(self, records, duration=9.0):
+        # duration 9.0 gives samples for clip seconds 0..9.
+        with mock.patch.object(ride_data, "clip_start", return_value=(T0, duration)):
+            ride, _ = ride_data.build(None, "clip.mp4", records=records)
+        return ride
+
+    def test_fields_start_and_stop_on_their_own(self):
+        # Heart rate pairs at second 2, power wakes at 4, and the head unit stops at 6.
+        records = [rec(s, heart_rate=130 + s, power=(200 if s >= 4 else None), enhanced_speed=5.0) for s in range(2, 7)]
+        ride = self.build(records)
+        self.assertEqual(ride["hr"], [None, None, 132, 133, 134, 135, 136, None, None, None])
+        self.assertEqual(ride["power"], [None] * 4 + [200, 200, 200] + [None] * 3)
+        self.assertEqual([v is None for v in ride["mph"]], [True, True] + [False] * 5 + [True] * 3)
+
+    def test_clip_ending_in_a_pause_holds(self):
+        # The head unit auto-paused at second 3 and resumed at 100, long after this clip ended.
+        # The FIT carries on, so the last reading holds to the end of the clip instead of blanking.
+        records = [rec(s, power=150, heart_rate=150) for s in range(0, 4)] + [rec(100, power=300, heart_rate=170)]
+        ride = self.build(records)
+        self.assertEqual(ride["power"], [150] * 10)
+        self.assertEqual(ride["hr"], [150] * 10)
+
+    def test_clip_starting_in_a_pause_holds(self):
+        # Paused from second -50 to 6 of this clip: the value before the pause holds, as on a head unit.
+        # Heart rate, not power, so the 3 s power average doesn't blur the edge.
+        records = [rec(-50, heart_rate=120), rec(-49, heart_rate=120)] + [rec(s, heart_rate=150) for s in range(6, 10)]
+        self.assertEqual(self.build(records)["hr"], [120] * 6 + [150] * 4)
+
+    def test_route_blank_outside_the_fit(self):
+        records = [rec(s, position_lat=round((40.0 + s * 1e-4) * SEMI), position_long=round(-73.0 * SEMI), power=100) for s in range(3, 8)]
+        ride = self.build(records)
+        for key in ("x", "y", "len"):
+            self.assertEqual(len(ride[key]), 10, key)
+            self.assertEqual([v is None for v in ride[key]], [True] * 3 + [False] * 5 + [True] * 2, key)
+        self.assertEqual((ride["len"][3], ride["len"][7]), (0.0, 1.0))
+
+
 class Average3(unittest.TestCase):
     def test_three_second_average(self):
         self.assertEqual(ride_data.average3([100, 200, 300, 400]), [100, 150, 200, 300])
@@ -105,8 +156,13 @@ class Readout(unittest.TestCase):
 
     def test_blank_seconds(self):
         ride = {"seconds": 1, "power": [None, 100], "hr": [None, 140], "cadence": None, "mph": [None, 5]}
-        self.assertEqual(reel.expected(ride, 0, {}), "no numbers (the FIT isn't recording here)")
+        self.assertEqual(reel.expected(ride, 0, {}), "no ride numbers (the FIT isn't recording here)")
         self.assertEqual(reel.expected(ride, 1, {}), "100 W, 140 bpm, 8.0 km/h")
+
+    def test_blank_seconds_with_the_timer_on(self):
+        # The timer keeps running on a blank frame; the readout only promises no ride numbers.
+        ride = {"seconds": 1, "power": [None, 100], "hr": None, "cadence": None, "mph": None}
+        self.assertEqual(reel.expected(ride, 0, {"showTime": True}), "no ride numbers (the FIT isn't recording here)")
 
 
 if __name__ == "__main__":

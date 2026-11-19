@@ -79,7 +79,7 @@ Then give the user the output path and say what's in the window.
 
 - **Use `creation_time`, not the file name.** File names are local time, and around a daylight-saving change they can be an hour off while `creation_time` stays right.
 - **Auto-pause leaves gaps in the FIT.** `ride_data.py` holds the last value across a gap instead of ramping, so a stop doesn't show the rider creeping along. Clips filmed while stopped get no numbers at all.
-- **Before the FIT starts and after it stops, the lines are blank.** A clip that rolls before the head unit starts (a race grid) or after it stops shows no numbers for those seconds, field by field, instead of holding the nearest reading. The check frames say "no numbers" there.
+- **Before the FIT starts and after it stops, the lines are blank.** A clip that rolls before the head unit starts (a race grid) or after it stops shows no numbers for those seconds, field by field, instead of holding the nearest reading. The check frames say "no ride numbers" there; the timer, if it's on, still runs.
 - **"FIT has no records inside the clip"** (single-clip scripts) means the wrong FIT, a pause, or an unsynced camera clock. Folder mode reports this per clip instead of stopping.
 - **The first HyperFrames run** downloads the pinned package. A render prints an upsell for HyperFrames' desktop app; ignore it.
 - **A camera clock a few seconds off doesn't show in the metadata.** `creation_time` plus duration matching the file's modified time proves nothing, since both come from the camera. Compare FIT stops and turns with the footage. Camera turning against GPS heading worked best; audio loudness, frame difference and camera shake were too noisy.

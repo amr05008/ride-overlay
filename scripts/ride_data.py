@@ -94,13 +94,20 @@ def build(fit, clip, offset=0.0, records=None):
     t0 += datetime.timedelta(seconds=offset)
     n = int(math.ceil(duration)) + 1
     allrecs = records if records is not None else load_fit(fit)
-    recs = []
+    recs, before = [], None
     for d in allrecs:
         t = (d["timestamp"] - t0).total_seconds()
         if -5 <= t <= n + 5:
             recs.append((t, d))
+        elif t < -5 and (before is None or t > before[0]):
+            before = (t, d)
     if len(recs) < 2:
         sys.exit(f"FIT has no records inside the clip ({t0.isoformat()}, {n} s): wrong file or unsynced camera clock")
+    count = len(recs)  # the clip's own records, for the report
+    if before:
+        # The last reading before the window: if the clip starts inside an auto-pause, that's the
+        # value to hold, not the first reading after the rider set off again.
+        recs.insert(0, before)
 
     def field(key, scale=1.0):
         """resample() limited to the seconds the whole FIT has this field, so it's blank outside them."""
@@ -144,7 +151,7 @@ def build(fit, clip, offset=0.0, records=None):
         "y": y,
         "len": length,
     }
-    return ride, len(recs)
+    return ride, count
 
 
 def missing(ride):

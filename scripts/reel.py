@@ -139,7 +139,8 @@ def expected(ride, t, v):
         kmh = v.get("units", "kmh") == "kmh"
         val = 0 if mph < 0.3 else mph * 1.609344 if kmh else mph
         out.append(f"{val:.1f} {'km/h' if kmh else 'mph'}")
-    return ", ".join(out) or "no numbers (the FIT isn't recording here)"
+    # The timer (showTime) is clip time, not ride data, so it still shows on a blank frame.
+    return ", ".join(out) or "no ride numbers (the FIT isn't recording here)"
 
 
 def index_html(framing, seconds, values):
